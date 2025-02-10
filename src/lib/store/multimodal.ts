@@ -246,28 +246,44 @@ export const useMultimodalStore = create<MultimodalStore>((set, get) => {
             const [summaryPromise, disconnectPromise] = await Promise.all([
               // サマリー生成と保存
               (async () => {
-                const summaryPrompt = `このセッションの音声会話を要約し、updateSessionSummary関数を呼び出してください。
-ユーザーとアシスタントの会話履歴に基づき、下記の項目を推察してまとめてください：
-1. ユーザーが探していた場所や目的
-2. 提供した主な情報や推奨事項（提案したお店を含む）
-3. ユーザーの好みや興味
+                const summaryPrompt = `# Command: Generate Session Summary
 
-**Notice**
-この処理に際して返事と読み上げはせず、updateSessionSummary関数を呼び出すだけにしてください。
+IMPORTANT: Execute ONLY the updateSessionSummary function. NO other text or explanation needed.
 
-会話の内容：
-${relevantMessages.map(msg => `${msg.role}: ${msg.content}`).join('\n')}`;
+Input: Conversation history below
+Output: Python function call ONLY
+
+Required format:
+default_api.updateSessionSummary(
+    messages=[
+        default_api.UpdatesessionsummaryMessages(role="user", content="message1"),
+        default_api.UpdatesessionsummaryMessages(role="assistant", content="message2")
+    ],
+    summary="Brief summary of the conversation focusing on user interests and key points"
+)
+
+Guidelines:
+1. Keep original message content exactly as is
+2. Create a concise summary (1-2 sentences)
+3. DO NOT modify or omit any messages
+4. DO NOT add any explanation, additional text or audio message
+
+Conversation History:
+${relevantMessages.map(msg => `${msg.role}: ${msg.content}`).join('\n')}
+
+Execute function now:`;
 
                 await client.sendMessage(summaryPrompt);
                 // より長いタイムアウトを設定
-                await new Promise(resolve => setTimeout(resolve, 30000));
+                await new Promise(resolve => setTimeout(resolve, 40000));
               })(),
               // 切断処理の準備
               (async () => {
-                await new Promise(resolve => setTimeout(resolve, 30000));
+                await new Promise(resolve => setTimeout(resolve, 40000));
                 client.disconnect();
                 client = null;
               })()
+
             ]);
           }
         } catch (error) {

@@ -36,7 +36,9 @@ service-account-key*
 
 # vercel
 .vercel
-*.sh
+deploy.sh
+Dockerfile
+firestore-debug.log
 
 # typescript
 *.tsbuildinfo

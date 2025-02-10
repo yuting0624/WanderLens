@@ -39,7 +39,8 @@ export function ChatContainer() {
     connect,
     disconnect,
     sendMessage,
-    getClient
+    getClient,
+    clearSessionReport
   } = useMultimodalStore()
 
   const [isVideoEnabled, setIsVideoEnabled] = useState(false)
@@ -634,12 +635,7 @@ export function ChatContainer() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 className="absolute -top-2 -right-2 z-10 p-2 rounded-full bg-gray-800/80 text-white/80 hover:bg-gray-700/80 transition-colors"
-                onClick={() => {
-                  const client = getClient()
-                  if (client) {
-                    client.clearSessionReport()
-                  }
-                }}
+                onClick={clearSessionReport}
               >
                 <X className="w-4 h-4" />
               </motion.button>

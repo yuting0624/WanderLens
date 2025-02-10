@@ -493,7 +493,6 @@ You are WanderLens, an Out-and-About Companion to help users enjoy their outings
   }
 
   private async handleModelResponse(parts: any[]) {
-    
     // Function Callの処理
     const functionCall = parts.find((part: any) => 
       part.functionCall || 
@@ -509,25 +508,39 @@ You are WanderLens, an Out-and-About Companion to help users enjoy their outings
       try {
         console.log('Function Callを処理:', functionCall)
         let result = null
+        let retryCount = 0
+        const maxRetries = 3
 
-        if (functionCall.functionCall) {
-          result = await this.handleFunctionCall(functionCall.functionCall)
-        } else if (functionCall.executableCode) {
-          const code = functionCall.executableCode.code
-          
-          if (code.includes('updateSessionSummary')) {
-            const match = code.match(/updateSessionSummary\(messages=\[(.*?)\], summary='(.*?)'\)/)
-            if (match) {
-              const messagesStr = match[1]
-              const summary = match[2]
+        const processUpdateSessionSummary = async (code: string): Promise<any> => {
+          try {
+            console.log('セッションサマリーの更新を開始:', { code })
+            
+            // 改行を含むより柔軟なパターンマッチング
+            const summaryMatch = code.match(/summary=(['"])([\s\S]*?)\1\s*\)/)
+            const messagesMatch = code.match(/messages=\[\s*([\s\S]*?)\s*\]/)
+            
+            if (summaryMatch && messagesMatch) {
+              const summary = summaryMatch[2]
+              const messagesStr = messagesMatch[1]
               
-              const messages = messagesStr.split('), ')
-                .map((msg: any) => {
-                  const contentMatch = msg.match(/content='(.*?)', role='(.*?)'/)
-                  if (contentMatch) {
+              console.log('メッセージと要約を抽出:', { 
+                messagesStrLength: messagesStr.length,
+                summary 
+              })
+              
+              // メッセージの解析を改善
+              const messages = messagesStr
+                .split('default_api.UpdatesessionsummaryMessages')
+                .filter((str: string) => str.includes('role') && str.includes('content'))
+                .map((str: string) => {
+                  // 改行を含む柔軟なマッチング
+                  const roleMatch = str.match(/role=(['"])(.*?)\1/)
+                  const contentMatch = str.match(/content=(['"])([\s\S]*?)\1/)
+                  
+                  if (roleMatch && contentMatch) {
                     return {
-                      content: contentMatch[1],
-                      role: contentMatch[2],
+                      role: roleMatch[2],
+                      content: contentMatch[2].replace(/\\n/g, '\n').replace(/\\"/g, '"'),  // エスケープ文字を処理
                       timestamp: Date.now()
                     }
                   }
@@ -535,13 +548,53 @@ You are WanderLens, an Out-and-About Companion to help users enjoy their outings
                 })
                 .filter((msg: any) => msg !== null)
 
-              result = await this.handleFunctionCall({
-                name: 'updateSessionSummary',
-                arguments: {
-                  summary,
-                  messages
-                }
+              console.log('パース済みメッセージ:', {
+                messageCount: messages.length,
+                messages
               })
+
+              if (messages.length > 0) {
+                return await this.handleFunctionCall({
+                  name: 'updateSessionSummary',
+                  arguments: {
+                    summary: summary.replace(/\\n/g, '\n').replace(/\\"/g, '"'),  // サマリーのエスケープ文字も処理
+                    messages
+                  }
+                })
+              }
+            } else {
+              console.warn('パターンマッチング失敗:', {
+                hasSummaryMatch: !!summaryMatch,
+                hasMessagesMatch: !!messagesMatch,
+                code
+              })
+            }
+            return null
+          } catch (error) {
+            console.error('セッションサマリーの処理エラー:', error)
+            return null
+          }
+        }
+
+        if (functionCall.functionCall) {
+          result = await this.handleFunctionCall(functionCall.functionCall)
+        } else if (functionCall.executableCode) {
+          const code = functionCall.executableCode.code
+          
+          if (code.includes('updateSessionSummary')) {
+            while (retryCount < maxRetries) {
+              result = await processUpdateSessionSummary(code)
+              if (result) break
+              
+              retryCount++
+              if (retryCount < maxRetries) {
+                console.log(`セッションサマリーの更新を再試行 (${retryCount}/${maxRetries})`)
+                await new Promise(resolve => setTimeout(resolve, 1000 * retryCount))
+              }
+            }
+            
+            if (!result) {
+              console.warn(`セッションサマリーの更新が${maxRetries}回失敗しました`)
             }
           } else if (code.includes('searchNearbyPlaces')) {
             const match = code.match(/searchNearbyPlaces\(([^)]+)\)/)
